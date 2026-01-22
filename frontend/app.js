@@ -1,21 +1,30 @@
-const API_URL = window.location.origin + "/api";
+/* ================= API ================= */
+const API_URL = window.location.origin + "/api"; // ✅ Vercel + local works
+
+/* ================= DOM ================= */
 const candidateList = document.getElementById("candidateList");
 const generateBtn = document.getElementById("generateBtn");
 const fromDateInput = document.getElementById("fromDate");
 const toDateInput = document.getElementById("toDate");
 const previewContainer = document.getElementById("payrollPreview");
+
 /* ================= TOGGLE PAYROLL ================= */
 const toggleBtn = document.getElementById("togglePayroll");
 const payrollCard = document.getElementById("payrollCard");
 
+/* ================= STATE ================= */
 let payrollRows = [];
 let previewTimer = null;
 
 /* ================= UTIL ================= */
 function parseNumberOrNull(v) {
   if (v === "" || v === null || v === undefined) return null;
-  const n = Number(v);
-  return Number.isNaN(n) ? null : n;
+  const num = Number(v);
+  return Number.isNaN(num) ? null : num;
+}
+
+function safeText(v) {
+  return v === null || v === undefined ? "" : String(v);
 }
 
 /* ================= EDITABLE FIELDS ================= */
@@ -48,18 +57,25 @@ function formatPayrollName(from, to) {
 
 function formatDateMMDDYYYY(dateStr) {
   const d = new Date(dateStr);
-  if (isNaN(d)) return "";
-
+  if (Number.isNaN(d.getTime())) return "";
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   const yyyy = d.getFullYear();
-
   return `${mm}-${dd}-${yyyy}`;
 }
 
-/* ================= Show / Hide Functionality ================= */
+async function safeJson(res) {
+  // If API returns HTML error, json() will crash. This prevents it.
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { error: text };
+  }
+}
+
+/* ================= Show / Hide Payroll ================= */
 if (toggleBtn && payrollCard) {
-  // ensure correct initial button text
   toggleBtn.textContent = "Generate Payroll";
 
   toggleBtn.addEventListener("click", () => {
@@ -72,178 +88,139 @@ if (toggleBtn && payrollCard) {
   });
 }
 
+/* ================= Generate Button Enable/Disable ================= */
 function updateGenerateState() {
-  const hasFrom = !!fromDateInput.value;
-  const hasTo = !!toDateInput.value;
-
+  const hasFrom = !!fromDateInput?.value;
+  const hasTo = !!toDateInput?.value;
   generateBtn.disabled = !(hasFrom && hasTo);
 }
 
-fromDateInput.addEventListener("change", updateGenerateState);
-toDateInput.addEventListener("change", updateGenerateState);
-
-// initial load
+fromDateInput?.addEventListener("change", updateGenerateState);
+toDateInput?.addEventListener("change", updateGenerateState);
 updateGenerateState();
 
-// function updateGenerateState() {
-//   generateBtn.disabled = !fromDateInput.value || !toDateInput.value;
-// }
-
-// fromDateInput.addEventListener("change", updateGenerateState);
-// toDateInput.addEventListener("change", updateGenerateState);
-// updateGenerateState();
-
 /* ================= LOAD CANDIDATES ================= */
-// async function loadCandidates() {
-//   const res = await fetch(`${API_URL}/candidates`);
-//   const candidates = await res.json();
-//   candidateList.innerHTML = "";
-
-//   candidates.forEach((c) => {
-//     // const card = document.createElement("div");
-//     // card.className = "candidate-card";
-//     const card = document.createElement("div");
-//     card.className = "candidate-card";
-//     card.innerHTML = ``;
-//     candidateList.appendChild(card);
-//     candidateList.innerHTML = `
-//   <table>
-//     <thead>
-//       <tr>
-//         <th></th>
-//         <th>Name</th>
-//         <th>Reg</th>
-//         <th>OT</th>
-//         <th>Holiday</th>
-//       </tr>
-//     </thead>
-//     <tbody>
-//       ${candidates
-//         .map(
-//           (c) => `
-//         <tr>
-//           <td>
-//             <input
-//               type="checkbox"
-//               class="candidate-checkbox"
-//               value="${c.candidate_uuid}"
-//             />
-//           </td>
-//           <td class="candidate-name">${c.candidate_name}</td>
-//           <td><input type="number" class="reg_hours" value="0" step="0.5" /></td>
-//           <td><input type="number" class="ot_hours" value="0" step="0.5" /></td>
-//           <td><input type="number" class="holiday_hours" value="0" step="0.5" /></td>
-//         </tr>
-//       `
-//         )
-//         .join("")}
-//     </tbody>
-//   </table>
-// `;
 async function loadCandidates() {
-  const res = await fetch(`${API_URL}/candidates`);
-  const candidates = await res.json();
+  try {
+    candidateList.innerHTML = "Loading candidates...";
 
-  if (!Array.isArray(candidates)) {
-    console.error("Candidates API error:", candidates);
-    alert("Candidates not loading. Check /api/candidates");
-    return;
-  }
+    const res = await fetch(`${API_URL}/candidates`);
+    const candidates = await safeJson(res);
 
-  candidateList.innerHTML = `
-    <table>
-      <thead>
-        <tr>
-          <th></th>
-          <th>Name</th>
-          <th>Reg</th>
-          <th>OT</th>
-          <th>Holiday</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${candidates
-          .map(
-            (c) => `
+    if (!res.ok) {
+      console.error("Candidates API error:", candidates);
+      candidateList.innerHTML = "Failed to load candidates.";
+      return;
+    }
+
+    if (!Array.isArray(candidates)) {
+      console.error("Candidates API returned non-array:", candidates);
+      candidateList.innerHTML = "Invalid candidates response.";
+      return;
+    }
+
+    candidateList.innerHTML = `
+      <table>
+        <thead>
           <tr>
-            <td>
-              <input
-                type="checkbox"
-                class="candidate-checkbox"
-                value="${c.candidate_uuid}"
-              />
-            </td>
-            <td class="candidate-name">${c.candidate_name}</td>
-            <td><input type="number" class="reg_hours" value="0" step="0.5" /></td>
-            <td><input type="number" class="ot_hours" value="0" step="0.5" /></td>
-            <td><input type="number" class="holiday_hours" value="0" step="0.5" /></td>
+            <th></th>
+            <th>Name</th>
+            <th>Reg</th>
+            <th>OT</th>
+            <th>Holiday</th>
           </tr>
-        `
-          )
-          .join("")}
-      </tbody>
-    </table>
-  `;
-}
-    candidateList.appendChild(card);
-  });
+        </thead>
+        <tbody>
+          ${candidates
+            .map(
+              (c) => `
+              <tr>
+                <td>
+                  <input
+                    type="checkbox"
+                    class="candidate-checkbox"
+                    value="${safeText(c.candidate_uuid)}"
+                  />
+                </td>
+                <td class="candidate-name">${safeText(c.candidate_name)}</td>
+                <td><input type="number" class="reg_hours" value="0" step="0.5" /></td>
+                <td><input type="number" class="ot_hours" value="0" step="0.5" /></td>
+                <td><input type="number" class="holiday_hours" value="0" step="0.5" /></td>
+              </tr>
+            `
+            )
+            .join("")}
+        </tbody>
+      </table>
+    `;
+  } catch (err) {
+    console.error("loadCandidates crash:", err);
+    candidateList.innerHTML = "Error loading candidates.";
+  }
 }
 
-generateBtn.addEventListener("click", async (e) => {
+/* ================= GENERATE PREVIEW ================= */
+generateBtn?.addEventListener("click", async (e) => {
   e.preventDefault();
 
-  const candidates = [];
+  try {
+    if (!fromDateInput.value || !toDateInput.value) {
+      alert("Please select Start Date and End Date");
+      return;
+    }
 
-  if (!fromDateInput.value || !toDateInput.value) {
-    alert("Please select Start Date and End Date");
-    return;
-  }
+    if (new Date(fromDateInput.value) > new Date(toDateInput.value)) {
+      alert("End Date cannot be before Start Date");
+      return;
+    }
 
-  if (new Date(fromDateInput.value) > new Date(toDateInput.value)) {
-    alert("End Date cannot be before Start Date");
-    return;
-  }
+    const candidates = [];
 
-  document.querySelectorAll(".candidate-checkbox:checked").forEach((cb) => {
-    const row = cb.closest("tr"); // ✅ FIX
+    document.querySelectorAll(".candidate-checkbox:checked").forEach((cb) => {
+      const row = cb.closest("tr");
+      if (!row) return;
 
-    if (!row) return;
-
-    candidates.push({
-      id: cb.value,
-      reg_hours: parseNumberOrNull(row.querySelector(".reg_hours")?.value),
-      ot_hours: parseNumberOrNull(row.querySelector(".ot_hours")?.value),
-      holiday_hours: parseNumberOrNull(
-        row.querySelector(".holiday_hours")?.value
-      ),
+      candidates.push({
+        id: cb.value,
+        reg_hours: parseNumberOrNull(row.querySelector(".reg_hours")?.value),
+        ot_hours: parseNumberOrNull(row.querySelector(".ot_hours")?.value),
+        holiday_hours: parseNumberOrNull(
+          row.querySelector(".holiday_hours")?.value
+        ),
+      });
     });
-  });
 
-  if (!candidates.length) {
-    alert("Select at least one candidate");
-    return;
+    if (!candidates.length) {
+      alert("Select at least one candidate");
+      return;
+    }
+
+    previewContainer.innerHTML = "Generating preview...";
+
+    const res = await fetch(`${API_URL}/payroll?action=preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ candidates }),
+    });
+
+    const data = await safeJson(res);
+
+    if (!res.ok || !Array.isArray(data.rows)) {
+      console.error("Preview error:", data);
+      alert(data.error || "Payroll preview failed");
+      previewContainer.innerHTML = "";
+      return;
+    }
+
+    payrollRows = data.rows;
+    renderPayrollTable();
+  } catch (err) {
+    console.error("Generate preview crash:", err);
+    alert("Preview failed. Check console logs.");
   }
-
-  const res = await fetch(`${API_URL}/payroll/preview`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ candidates }),
-  });
-
-  const data = await res.json();
-
-  if (!res.ok || !Array.isArray(data.rows)) {
-    console.error("Preview error:", data);
-    alert("Payroll preview failed");
-    return;
-  }
-
-  payrollRows = data.rows;
-  renderPayrollTable();
 });
 
-/* ================= TABLE ================= */
-
+/* ================= TABLE RENDER ================= */
 function renderPayrollTable() {
   const headers = [
     ["candidate_name", "NAME"],
@@ -295,50 +272,47 @@ function renderPayrollTable() {
           ${payrollRows
             .map(
               (row, r) => `
-              <tr>
-                ${headers
-                  .map(
-                    ([key]) => `
-                    <td
-                      data-row="${r}"
-                      data-key="${key}"
-                      class="${
-                        EDITABLE_FIELDS.includes(key) ? "editable" : "readonly"
-                      }"
-                      ${
-                        key !== "missed_payment_type" &&
-                        EDITABLE_FIELDS.includes(key)
-                          ? 'contenteditable="true"'
-                          : ""
+                <tr>
+                  ${headers
+                    .map(([key]) => {
+                      const isEditable = EDITABLE_FIELDS.includes(key);
+
+                      if (key === "missed_payment_type") {
+                        return `
+                          <td data-row="${r}" data-key="${key}" class="editable">
+                            ${renderMissedType(row[key])}
+                          </td>
+                        `;
                       }
-                    >
-                      ${
-                        key === "missed_payment_type"
-                          ? renderMissedType(row[key])
-                          : row[key] ?? ""
-                      }
-                    </td>
-                  `
-                  )
-                  .join("")}
-              </tr>
-            `
+
+                      return `
+                        <td
+                          data-row="${r}"
+                          data-key="${key}"
+                          class="${isEditable ? "editable" : "readonly"}"
+                          ${isEditable ? 'contenteditable="true"' : ""}
+                        >
+                          ${safeText(row[key])}
+                        </td>
+                      `;
+                    })
+                    .join("")}
+                </tr>
+              `
             )
-            .join("")} 
+            .join("")}
         </tbody>
       </table>
     </div>
 
     <div class="payroll-footer">
-  <div class="payroll-actions">
-    <button id="saveBtn" class="btn primary">Save Payroll</button>
-    <button id="pushBtn" class="btn secondary">Download Payroll</button>
-  </div>
+      <div class="payroll-actions">
+        <button id="saveBtn" class="btn primary">Save Payroll</button>
+        <button id="downloadBtn" class="btn secondary">Download Payroll</button>
+      </div>
 
-  <div id="reportTotals"></div>
-</div>
-
-    <br /> 
+      <div id="reportTotals"></div>
+    </div>
   `;
 
   previewContainer
@@ -350,35 +324,37 @@ function renderPayrollTable() {
     .forEach((sel) => sel.addEventListener("change", onMissedTypeChange));
 
   document.getElementById("saveBtn").onclick = savePayroll;
-  document.getElementById("pushBtn").onclick = pushToGSheet;
+  document.getElementById("downloadBtn").onclick = downloadPayroll;
 
-  function calculateGrossReportTotals(rows) {
-    const sum = (key) => rows.reduce((t, r) => t + Number(r[key] || 0), 0);
-
-    const totalBonus = sum("overall_bonus");
-    const totalGrossPay = sum("total_pay");
-    const totalReimbursement = sum("standard_stipend_amount");
-
-    return {
-      totalBonus,
-      totalGrossPay,
-      totalReimbursement,
-      totalEarnings: totalGrossPay + totalReimbursement,
-    };
-  }
-
-  // 🔽 CALCULATE & RENDER REPORT TOTALS
   const totals = calculateGrossReportTotals(payrollRows);
   renderReportTotals(totals);
+
+  // highlight negative profit
+  previewContainer.querySelectorAll('[data-key="net_profit"]').forEach((td) => {
+    const v = Number(td.textContent);
+    if (!Number.isNaN(v) && v < 0) td.classList.add("negative");
+  });
 }
-document.querySelectorAll('[data-key="net_profit"]').forEach((td) => {
-  const v = Number(td.textContent);
-  if (!isNaN(v) && v < 0) td.classList.add("negative");
-});
 
 /* ================= REPORT TOTALS ================= */
+function calculateGrossReportTotals(rows) {
+  const sum = (key) => rows.reduce((t, r) => t + Number(r[key] || 0), 0);
+
+  const totalBonus = sum("overall_bonus");
+  const totalGrossPay = sum("total_pay");
+  const totalReimbursement = sum("standard_stipend_amount");
+
+  return {
+    totalBonus,
+    totalGrossPay,
+    totalReimbursement,
+    totalEarnings: totalGrossPay + totalReimbursement,
+  };
+}
+
 function renderReportTotals(totals) {
   const container = document.getElementById("reportTotals");
+  if (!container) return;
 
   if (!totals) {
     container.innerHTML = "";
@@ -386,36 +362,34 @@ function renderReportTotals(totals) {
   }
 
   container.innerHTML = `
-  <div class="report-totals-wrapper">
-    <div class="report-totals-card">
-      <div class="report-totals-header">
-        Report Totals
-      </div>
+    <div class="report-totals-wrapper">
+      <div class="report-totals-card">
+        <div class="report-totals-header">Report Totals</div>
 
-      <div class="report-totals-body">
-        <div class="totals-row">
-          <span>Total Bonus</span>
-          <strong>${totals.totalBonus.toFixed(2)}</strong>
-        </div>
+        <div class="report-totals-body">
+          <div class="totals-row">
+            <span>Total Bonus</span>
+            <strong>${totals.totalBonus.toFixed(2)}</strong>
+          </div>
 
-        <div class="totals-row">
-          <span>GUSTO TOTAL Gross Pay</span>
-          <strong>${totals.totalGrossPay.toFixed(2)}</strong>
-        </div>
+          <div class="totals-row">
+            <span>GUSTO TOTAL Gross Pay</span>
+            <strong>${totals.totalGrossPay.toFixed(2)}</strong>
+          </div>
 
-        <div class="totals-row">
-          <span>GUSTO Total Reimbursement</span>
-          <strong>${totals.totalReimbursement.toFixed(2)}</strong>
-        </div>
+          <div class="totals-row">
+            <span>GUSTO Total Reimbursement</span>
+            <strong>${totals.totalReimbursement.toFixed(2)}</strong>
+          </div>
 
-        <div class="totals-row totals-highlight">
-          <span>Total Earnings</span>
-          <strong>${totals.totalEarnings.toFixed(2)}</strong>
+          <div class="totals-row totals-highlight">
+            <span>Total Earnings</span>
+            <strong>${totals.totalEarnings.toFixed(2)}</strong>
+          </div>
         </div>
       </div>
     </div>
-  </div>
-`;
+  `;
 }
 
 /* ================= DROPDOWN ================= */
@@ -423,16 +397,10 @@ function renderMissedType(value) {
   return `
     <select class="missed-type">
       <option value="">--</option>
-      <option value="regular" ${
-        value === "regular" ? "selected" : ""
-      }>Regular</option>
+      <option value="regular" ${value === "regular" ? "selected" : ""}>Regular</option>
       <option value="ot" ${value === "ot" ? "selected" : ""}>OT</option>
-      <option value="stipend" ${
-        value === "stipend" ? "selected" : ""
-      }>Stipend</option>
-      <option value="holiday" ${
-        value === "holiday" ? "selected" : ""
-      }>Holiday</option>
+      <option value="stipend" ${value === "stipend" ? "selected" : ""}>Stipend</option>
+      <option value="holiday" ${value === "holiday" ? "selected" : ""}>Holiday</option>
     </select>
   `;
 }
@@ -440,94 +408,122 @@ function renderMissedType(value) {
 /* ================= EDIT ================= */
 function onCellEdit(e) {
   const td = e.target;
-  payrollRows[td.dataset.row][td.dataset.key] = parseNumberOrNull(
-    td.textContent.trim()
-  );
+  const rowIndex = Number(td.dataset.row);
+  const key = td.dataset.key;
+
+  payrollRows[rowIndex][key] = parseNumberOrNull(td.textContent.trim());
   debouncePreview();
 }
 
 function onMissedTypeChange(e) {
   const td = e.target.closest("td");
-  payrollRows[td.dataset.row].missed_payment_type = e.target.value || null;
+  if (!td) return;
+
+  const rowIndex = Number(td.dataset.row);
+  payrollRows[rowIndex].missed_payment_type = e.target.value || null;
   debouncePreview();
 }
 
-/* ================= PREVIEW ================= */
+/* ================= AUTO PREVIEW (recalculate) ================= */
 function debouncePreview() {
   clearTimeout(previewTimer);
   previewTimer = setTimeout(runPreview, 300);
 }
 
 async function runPreview() {
-  const res = await fetch(`${API_URL}/payroll/preview`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      candidates: payrollRows.map((r) => ({
-        id: r.candidate_uuid,
-        ...Object.fromEntries(EDITABLE_FIELDS.map((f) => [f, r[f] ?? null])),
-      })),
-    }),
-  });
+  try {
+    const res = await fetch(`${API_URL}/payroll?action=preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        candidates: payrollRows.map((r) => ({
+          id: r.candidate_uuid,
+          ...Object.fromEntries(EDITABLE_FIELDS.map((f) => [f, r[f] ?? null])),
+        })),
+      }),
+    });
 
-  const data = await res.json();
-  if (res.ok && Array.isArray(data.rows)) {
-    payrollRows = data.rows;
-    renderPayrollTable();
+    const data = await safeJson(res);
+
+    if (res.ok && Array.isArray(data.rows)) {
+      payrollRows = data.rows;
+      renderPayrollTable();
+    } else {
+      console.error("Auto preview failed:", data);
+    }
+  } catch (err) {
+    console.error("runPreview crash:", err);
   }
 }
 
 /* ================= SAVE ================= */
 async function savePayroll() {
-  await fetch(`${API_URL}/payroll/save`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      from_date: fromDateInput.value,
-      to_date: toDateInput.value,
-      payroll_name: formatPayrollName(fromDateInput.value, toDateInput.value),
-      rows: payrollRows,
-    }),
-  });
+  try {
+    const res = await fetch(`${API_URL}/payroll?action=save`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from_date: fromDateInput.value,
+        to_date: toDateInput.value,
+        payroll_name: formatPayrollName(fromDateInput.value, toDateInput.value),
+        rows: payrollRows,
+      }),
+    });
 
-  alert("Payroll saved successfully");
+    const data = await safeJson(res);
+
+    if (!res.ok) {
+      console.error("Save error:", data);
+      alert(data.error || "Save failed");
+      return;
+    }
+
+    alert("Payroll saved successfully");
+  } catch (err) {
+    console.error("savePayroll crash:", err);
+    alert("Save failed. Check console.");
+  }
 }
 
-/* ================= PUSH TO GSHEET ================= */
+/* ================= DOWNLOAD ================= */
+async function downloadPayroll() {
+  try {
+    const from = formatDateMMDDYYYY(fromDateInput.value);
+    const to = formatDateMMDDYYYY(toDateInput.value);
+    const filename = `Payroll_Period_${from}_to_${to}.xlsx`;
 
-async function pushToGSheet() {
-  const from = formatDateMMDDYYYY(fromDateInput.value);
-  const to = formatDateMMDDYYYY(toDateInput.value);
+    const res = await fetch(`${API_URL}/payroll?action=download`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        rows: payrollRows,
+        from_date: fromDateInput.value,
+        to_date: toDateInput.value,
+      }),
+    });
 
-  const filename = `Payroll_Period_${from}_to_${to}.xlsx`;
-  
-  const res = await fetch(`${API_URL}/payroll/push-to-gsheet`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      rows: payrollRows,
-      from_date: fromDateInput.value,
-      to_date: toDateInput.value,
-    }),
-  });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("Download failed:", errText);
+      alert("Download failed. Check Vercel logs.");
+      return;
+    }
 
-  if (!res.ok) {
-    const err = await res.json();
-    alert(err.error || "Download failed");
-    return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error("downloadPayroll crash:", err);
+    alert("Download failed. Check console.");
   }
-
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename; // ✅ EXACT filename format
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-
-  URL.revokeObjectURL(url);
 }
 
 /* ================= INIT ================= */
