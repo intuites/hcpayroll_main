@@ -94,53 +94,97 @@ updateGenerateState();
 // updateGenerateState();
 
 /* ================= LOAD CANDIDATES ================= */
+// async function loadCandidates() {
+//   const res = await fetch(`${API_URL}/candidates`);
+//   const candidates = await res.json();
+//   candidateList.innerHTML = "";
+
+//   candidates.forEach((c) => {
+//     // const card = document.createElement("div");
+//     // card.className = "candidate-card";
+//     const card = document.createElement("div");
+//     card.className = "candidate-card";
+//     card.innerHTML = ``;
+//     candidateList.appendChild(card);
+//     candidateList.innerHTML = `
+//   <table>
+//     <thead>
+//       <tr>
+//         <th></th>
+//         <th>Name</th>
+//         <th>Reg</th>
+//         <th>OT</th>
+//         <th>Holiday</th>
+//       </tr>
+//     </thead>
+//     <tbody>
+//       ${candidates
+//         .map(
+//           (c) => `
+//         <tr>
+//           <td>
+//             <input
+//               type="checkbox"
+//               class="candidate-checkbox"
+//               value="${c.candidate_uuid}"
+//             />
+//           </td>
+//           <td class="candidate-name">${c.candidate_name}</td>
+//           <td><input type="number" class="reg_hours" value="0" step="0.5" /></td>
+//           <td><input type="number" class="ot_hours" value="0" step="0.5" /></td>
+//           <td><input type="number" class="holiday_hours" value="0" step="0.5" /></td>
+//         </tr>
+//       `
+//         )
+//         .join("")}
+//     </tbody>
+//   </table>
+// `;
 async function loadCandidates() {
   const res = await fetch(`${API_URL}/candidates`);
   const candidates = await res.json();
-  candidateList.innerHTML = "";
 
-  candidates.forEach((c) => {
-    // const card = document.createElement("div");
-    // card.className = "candidate-card";
-    const card = document.createElement("div");
-    card.className = "candidate-card";
-    card.innerHTML = ``;
-    candidateList.appendChild(card);
-    candidateList.innerHTML = `
-  <table>
-    <thead>
-      <tr>
-        <th></th>
-        <th>Name</th>
-        <th>Reg</th>
-        <th>OT</th>
-        <th>Holiday</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${candidates
-        .map(
-          (c) => `
+  if (!Array.isArray(candidates)) {
+    console.error("Candidates API error:", candidates);
+    alert("Candidates not loading. Check /api/candidates");
+    return;
+  }
+
+  candidateList.innerHTML = `
+    <table>
+      <thead>
         <tr>
-          <td>
-            <input
-              type="checkbox"
-              class="candidate-checkbox"
-              value="${c.candidate_uuid}"
-            />
-          </td>
-          <td class="candidate-name">${c.candidate_name}</td>
-          <td><input type="number" class="reg_hours" value="0" step="0.5" /></td>
-          <td><input type="number" class="ot_hours" value="0" step="0.5" /></td>
-          <td><input type="number" class="holiday_hours" value="0" step="0.5" /></td>
+          <th></th>
+          <th>Name</th>
+          <th>Reg</th>
+          <th>OT</th>
+          <th>Holiday</th>
         </tr>
-      `
-        )
-        .join("")}
-    </tbody>
-  </table>
-`;
-
+      </thead>
+      <tbody>
+        ${candidates
+          .map(
+            (c) => `
+          <tr>
+            <td>
+              <input
+                type="checkbox"
+                class="candidate-checkbox"
+                value="${c.candidate_uuid}"
+              />
+            </td>
+            <td class="candidate-name">${c.candidate_name}</td>
+            <td><input type="number" class="reg_hours" value="0" step="0.5" /></td>
+            <td><input type="number" class="ot_hours" value="0" step="0.5" /></td>
+            <td><input type="number" class="holiday_hours" value="0" step="0.5" /></td>
+          </tr>
+        `
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
+}
     candidateList.appendChild(card);
   });
 }
