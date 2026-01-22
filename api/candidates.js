@@ -16,7 +16,7 @@ export default async function handler(req, res) {
     const supabase = createClient(url, key);
 
     const { data, error } = await supabase
-      .from("candidates")
+      .from("candidate_data")
       .select("*")
       .limit(5);
 
